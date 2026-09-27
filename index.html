@@ -202,7 +202,6 @@ button.act{flex:1;padding:10px;border:none;border-radius:8px;cursor:pointer;font
     <div class="field"><label>IGN</label><input id="f-name" placeholder="Player name"></div>
     <div class="field"><label>Region</label><select id="f-region"></select></div>
     <div class="field"><label>Skin Image (auto-resized to 64&times;64 PNG)</label><input type="file" id="f-skin-file" accept="image/*"><img id="f-skin-preview" class="skin-preview" style="display:none"></div>
-    <div class="field"><label>Overall Tier</label><select id="f-overall"></select></div>
     <div class="field"><label style="margin-bottom:6px">Gamemode Points</label>
       <div class="gm-grid" id="gm-inputs"></div>
     </div>
@@ -303,6 +302,9 @@ function isRanked(p, key){
 function totalPoints(p){
   if(!p.points) return 0;
   return GAMEMODES.reduce((sum,[key])=> sum + (isRanked(p,key) ? (p.points[key]||0) : 0), 0);
+}
+function overallTierFromPoints(pts){
+  return pointsToTier(pts).replace("High ","").replace("Low ","");
 }
 function topGamemodes(p, n){
   if(!p.points) return [];
@@ -412,9 +414,8 @@ function renderOverallLeaderboard(){
 
   const filtered = players.filter(p => p.name && p.name.toLowerCase().includes(searchQuery));
   filtered.sort((a,b)=>{
-    const ai = OVERALL_TIERS.indexOf(a.overallTier || "F");
-    const bi = OVERALL_TIERS.indexOf(b.overallTier || "F");
-    if(ai !== bi) return ai - bi;
+    const pb = totalPoints(b), pa = totalPoints(a);
+    if(pb !== pa) return pb - pa;
     return (a.name||"").localeCompare(b.name||"");
   });
 
@@ -427,7 +428,7 @@ function renderOverallLeaderboard(){
     wrap.innerHTML += `<div class="empty">${searchQuery ? "no match" : "no players ranked yet"}</div>`;
   } else {
     filtered.forEach((p,i)=>{
-      const ot = p.overallTier || "F";
+      const ot = overallTierFromPoints(totalPoints(p));
       const rankClass = i===0 ? " rank-gold" : i===1 ? " rank-silver" : i===2 ? " rank-bronze" : "";
       const top3 = topGamemodes(p, 3);
       let top3Html = top3.map(([key,label,pts])=>{
@@ -508,7 +509,6 @@ function populateSelect(id, list){
   const sel = document.getElementById(id);
   sel.innerHTML = list.map(v=>`<option value="${v}">${v}</option>`).join("");
 }
-populateSelect("f-overall", OVERALL_TIERS);
 document.getElementById("f-region").innerHTML = REGIONS.map(([code,name])=>`<option value="${code}">${code} — ${name}</option>`).join("");
 
 const gmInputsDiv = document.getElementById("gm-inputs");
@@ -551,7 +551,6 @@ function openAdd(){
   document.getElementById("f-region").value = "NA";
   document.getElementById("f-skin-file").value = "";
   setSkinPreview("");
-  document.getElementById("f-overall").value = "F";
   GAMEMODES.forEach(([key])=>{ document.getElementById(`pts-${key}`).value = ""; });
   document.getElementById("delRow").style.display = "none";
   document.getElementById("addBg").classList.add("open");
@@ -563,7 +562,6 @@ function openEdit(p){
   document.getElementById("f-region").value = p.region||"NA";
   document.getElementById("f-skin-file").value = "";
   setSkinPreview(p.skin||"");
-  document.getElementById("f-overall").value = p.overallTier||"F";
   GAMEMODES.forEach(([key])=>{ document.getElementById(`pts-${key}`).value = isRanked(p,key) ? p.points[key] : ""; });
   document.getElementById("delRow").style.display = "flex";
   document.getElementById("viewBg").classList.remove("open");
@@ -571,9 +569,8 @@ function openEdit(p){
 }
 function computeOverallRank(target){
   const sorted = players.slice().sort((a,b)=>{
-    const ai = OVERALL_TIERS.indexOf(a.overallTier || "F");
-    const bi = OVERALL_TIERS.indexOf(b.overallTier || "F");
-    if(ai !== bi) return ai - bi;
+    const pb = totalPoints(b), pa = totalPoints(a);
+    if(pb !== pa) return pb - pa;
     return (a.name||"").localeCompare(b.name||"");
   });
   return sorted.findIndex(p=>p.id===target.id) + 1;
@@ -589,7 +586,7 @@ function openView(p){
   const regionName = (REGIONS.find(r=>r[0]===(p.region||""))||["",""])[1];
   document.getElementById("viewRegion").textContent = p.region ? `${p.region} — ${regionName}` : "Region not set";
   document.getElementById("viewRank").textContent = `#${rank} Overall`;
-  const ot = p.overallTier || "F";
+  const ot = overallTierFromPoints(totalPoints(p));
   document.getElementById("viewOverall").innerHTML = `<span class="badge" style="background:${OVERALL_COLOR[ot]}">${ot}</span>`;
   document.getElementById("viewPoints").textContent = totalPoints(p);
   const stats = document.getElementById("viewStats");
@@ -644,7 +641,6 @@ document.getElementById("saveBtn").onclick = async ()=>{
     name,
     region: document.getElementById("f-region").value,
     skin: currentSkinData,
-    overallTier: document.getElementById("f-overall").value,
     points
   };
   const saveBtnEl = document.getElementById("saveBtn");
