@@ -58,7 +58,10 @@ h1{font-size:1.5rem;font-weight:900;letter-spacing:.3px;margin:0;line-height:1}
 .lb-name{font-size:.82rem;font-weight:700;color:#c9c7d1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lb-points{font-size:.62rem;color:var(--sub);font-weight:600;margin-top:1px}
 .lb-region-col{font-size:.64rem;color:var(--sub);background:var(--slot);border:1px solid var(--line);border-radius:4px;padding:3px 6px;text-align:center;justify-self:start}
-.lb-tier-col{justify-self:start}
+.lb-tier-col{justify-self:start;display:flex;align-items:center}
+.tbadge{display:block;flex-shrink:0;overflow:visible}
+.player-title{display:flex;align-items:center;gap:8px;margin-top:8px}
+.player-title span{font-size:.9rem;font-weight:800;letter-spacing:.3px}
 .lb-top3{display:flex;gap:6px}
 .mini-gm{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;background:var(--slot);flex-shrink:0}
 .mini-gm img{width:60%;height:60%;object-fit:contain}
@@ -223,11 +226,11 @@ button.act{flex:1;padding:10px;border:none;border-radius:8px;cursor:pointer;font
         <div class="player-name" id="viewName"></div>
         <div class="player-region" id="viewRegion"></div>
         <div class="player-rankline" id="viewRank"></div>
+        <div class="player-title" id="viewTitle"></div>
       </div>
       <div class="player-right">
         <div class="player-stats">
           <div class="pstat"><span>Total Points</span><b id="viewPoints"></b></div>
-          <div class="pstat"><span>Tier</span><b id="viewOverall"></b></div>
         </div>
         <div class="gm-tile-grid" id="viewStats"></div>
       </div>
@@ -279,8 +282,76 @@ const TIER_SHORT = {"S":"S","High A":"H-A","Low A":"L-A","High B":"H-B","Low B":
 const POINTS = {"S":750,"High A":550,"Low A":400,"High B":300,"Low B":200,"High C":120,"Low C":85,"High D":50,"Low D":30,"F":0};
 const TIER_COLOR = {"S":"#ffd700","High A":"#ffb066","Low A":"#ff8c38","High B":"#ffe14d","Low B":"#f3e58f","High C":"#9be89a","Low C":"#4fbf5e","High D":"#8fd9f5","Low D":"#38c7d9","F":"#8a8a90"};
 
-const OVERALL_TIERS = ["S","A","B","C","D","E","F"];
-const OVERALL_COLOR = {"S":"#ffd23d","A":"#ff8a3d","B":"#ffe066","C":"#6fe07a","D":"#4fc3d9","E":"#b48af0","F":"#6b7280"};
+// ---- Title badges (gem emblems, one shape + colour per title) ----
+const TITLE = {
+  S:{c:"#ffc933",l:"#ffe98a",d:"#b07a06"},
+  A:{c:"#e0433f",l:"#ff8a80",d:"#8c1c1c"},
+  B:{c:"#f5e58a",l:"#fff8c9",d:"#c2ad4a"},
+  C:{c:"#1f7a4a",l:"#4cc48a",d:"#0d4327"},
+  D:{c:"#2a4fa8",l:"#6f95e8",d:"#14285e"},
+  E:{c:"#9b5de5",l:"#cfa8ff",d:"#5a2d99"},
+  F:{c:"#8a8a90",l:"#c4c4ca",d:"#4d4d53"}
+};
+function regPoly(n, r, start){
+  const pts = [];
+  for(let i=0;i<n;i++){
+    const a = (start + i*360/n) * Math.PI/180;
+    pts.push([32 + r*Math.cos(a), 32 + r*Math.sin(a)]);
+  }
+  return pts;
+}
+function starPts(n, rOut, rIn){
+  const pts = [];
+  for(let i=0;i<n*2;i++){
+    const a = (-90 + i*180/n) * Math.PI/180;
+    const r = i%2===0 ? rOut : rIn;
+    pts.push([32 + r*Math.cos(a), 32 + r*Math.sin(a)]);
+  }
+  return pts;
+}
+const scalePts = (pts,k)=> pts.map(([x,y])=>[32+(x-32)*k, 32+(y-32)*k]);
+const ptsStr = pts => pts.map(([x,y])=>x.toFixed(1)+","+y.toFixed(1)).join(" ");
+
+// gem outline, backing scale, text y-offset, glow radius, extra accents
+const SHAPES = {
+  S:{ gem: starPts(4,27,12),               back:null, ty:39.5, glow:6, accent:"spark" },
+  A:{ gem: [[32,5],[49,32],[32,59],[15,32]], back:1.1,  ty:39.5, glow:4, accent:"ticks" },
+  B:{ gem: regPoly(8,22,22.5),              back:1.32, ty:39.5, glow:2, accent:null },
+  C:{ gem: regPoly(6,22,-90),               back:1.32, ty:39.5, glow:0, accent:null },
+  D:{ gem: regPoly(5,22,-90),               back:1.32, ty:41,   glow:0, accent:null },
+  E:{ gem: [[32,10],[52,32],[32,54],[12,32]], back:1.3, ty:39.5, glow:0, accent:null },
+  F:{ gem: [[13,15],[51,15],[32,51]],       back:1.32, ty:33,   glow:0, accent:null }
+};
+let _tbId = 0;
+function titleBadge(letter, size){
+  size = size || 40;
+  const t = TITLE[letter] || TITLE.F;
+  const s = SHAPES[TITLE[letter] ? letter : "F"];
+  const id = "tb" + (_tbId++);
+  const inner = scalePts(s.gem, 0.6);
+  let back = "";
+  if(s.back){
+    back = `<polygon points="${ptsStr(scalePts(s.gem, s.back))}" fill="rgba(255,255,255,.10)" stroke="rgba(255,255,255,.22)" stroke-width="1.2" stroke-linejoin="round"/>`;
+  } else {
+    back = `<circle cx="32" cy="32" r="30" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.2)" stroke-width="1.2"/>`;
+  }
+  let acc = "";
+  if(s.accent==="spark"){
+    const sp = (cx,cy)=>`<polygon points="${ptsStr(starPts(4,4.2,1.2).map(([x,y])=>[x-32+cx,y-32+cy]))}" fill="#fff" opacity=".9"/>`;
+    acc = sp(6,32) + sp(58,32);
+  } else if(s.accent==="ticks"){
+    acc = `<path d="M6 26v12M58 26v12" stroke="rgba(255,255,255,.8)" stroke-width="2" stroke-linecap="round"/>`;
+  }
+  const glow = s.glow ? `filter:drop-shadow(0 0 ${s.glow}px ${t.c});` : "";
+  return `<svg class="tbadge" width="${size}" height="${size}" viewBox="0 0 64 64" style="${glow}" aria-label="${letter} title">`
+    + `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${t.l}"/><stop offset="1" stop-color="${t.d}"/></linearGradient></defs>`
+    + back + acc
+    + `<polygon points="${ptsStr(s.gem)}" fill="url(#${id})" stroke="${t.l}" stroke-width="1.4" stroke-linejoin="round"/>`
+    + `<polygon points="${ptsStr(inner)}" fill="rgba(255,255,255,.16)" stroke="rgba(255,255,255,.4)" stroke-width="1" stroke-linejoin="round"/>`
+    + `<text x="32" y="${s.ty}" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="21" font-weight="900" fill="#fff" stroke="rgba(0,0,0,.6)" stroke-width="2.6" paint-order="stroke" stroke-linejoin="round">${letter}</text>`
+    + `</svg>`;
+}
+
 
 function pointsToTier(pts){
   pts = pts||0;
@@ -303,8 +374,29 @@ function totalPoints(p){
   if(!p.points) return 0;
   return GAMEMODES.reduce((sum,[key])=> sum + (isRanked(p,key) ? (p.points[key]||0) : 0), 0);
 }
-function overallTierFromPoints(pts){
-  return pointsToTier(pts).replace("High ","").replace("Low ","");
+// ---- Overall tier: built from the player's tiers in their tested gamemodes ----
+const TIER_LEVEL = {"S":9,"High A":8,"Low A":7,"High B":6,"Low B":5,"High C":4,"Low C":3,"High D":2,"Low D":1,"F":0};
+// Importance of each gamemode for overall skill in SMP PvP (edit these numbers to rebalance)
+const GM_WEIGHT = {diamondsmp:10, smp:9, uhc:8, sword:7, axe:6, spearmace:4, mace:4, pot:4, netherop:4, tntcart:2, crystal:1};
+function overallTierFor(p){
+  const tested = GAMEMODES.filter(([k])=>isRanked(p,k)).map(([k])=>({
+    w: GM_WEIGHT[k] || 1,
+    lvl: TIER_LEVEL[pointsToTier(p.points[k])]
+  }));
+  if(!tested.length) return "F";
+  const wAvg = arr => arr.reduce((s,t)=>s+t.w*t.lvl,0) / arr.reduce((s,t)=>s+t.w,0);
+  const best3 = tested.slice().sort((a,b)=> b.lvl-a.lvl || b.w-a.w).slice(0,3);
+  const blend = 0.7*wAvg(tested) + 0.3*wAvg(best3);
+  // Only testing minor gamemodes limits how high the overall tier can go
+  const coverage = Math.min(1, tested.reduce((s,t)=>s+t.w,0) / 20);
+  const lvl = Math.round(blend * (0.2 + 0.8*coverage));
+  if(lvl>=9) return "S";
+  if(lvl>=7) return "A";
+  if(lvl>=5) return "B";
+  if(lvl>=3) return "C";
+  if(lvl>=2) return "D";
+  if(lvl>=1) return "E";
+  return "F";
 }
 function topGamemodes(p, n){
   if(!p.points) return [];
@@ -421,14 +513,14 @@ function renderOverallLeaderboard(){
 
   const head = document.createElement("div");
   head.className = "lb-head-row";
-  head.innerHTML = `<span></span><span>Player</span><span>Region</span><span>Tier</span><span>Rank</span>`;
+  head.innerHTML = `<span></span><span>Player</span><span>Region</span><span>Title</span><span>Rank</span>`;
   wrap.appendChild(head);
 
   if(filtered.length===0){
     wrap.innerHTML += `<div class="empty">${searchQuery ? "no match" : "no players ranked yet"}</div>`;
   } else {
     filtered.forEach((p,i)=>{
-      const ot = overallTierFromPoints(totalPoints(p));
+      const ot = overallTierFor(p);
       const rankClass = i===0 ? " rank-gold" : i===1 ? " rank-silver" : i===2 ? " rank-bronze" : "";
       const top3 = topGamemodes(p, 3);
       let top3Html = top3.map(([key,label,pts])=>{
@@ -450,7 +542,7 @@ function renderOverallLeaderboard(){
           </div>
         </div>
         <div class="lb-region-col">${p.region||"—"}</div>
-        <div class="lb-tier-col"><span class="badge" style="background:${OVERALL_COLOR[ot]}">${ot}</span></div>
+        <div class="lb-tier-col">${titleBadge(ot,42)}</div>
         <div class="lb-top3">${top3Html}</div>
       `;
       row.onclick = ()=> openView(p);
@@ -586,8 +678,8 @@ function openView(p){
   const regionName = (REGIONS.find(r=>r[0]===(p.region||""))||["",""])[1];
   document.getElementById("viewRegion").textContent = p.region ? `${p.region} — ${regionName}` : "Region not set";
   document.getElementById("viewRank").textContent = `#${rank} Overall`;
-  const ot = overallTierFromPoints(totalPoints(p));
-  document.getElementById("viewOverall").innerHTML = `<span class="badge" style="background:${OVERALL_COLOR[ot]}">${ot}</span>`;
+  const ot = overallTierFor(p);
+  document.getElementById("viewTitle").innerHTML = `${titleBadge(ot,64)}<span style="color:${TITLE[ot].l}">${ot} Tier</span>`;
   document.getElementById("viewPoints").textContent = totalPoints(p);
   const stats = document.getElementById("viewStats");
   const sortedGM = GAMEMODES.slice().sort((a,b)=>{
