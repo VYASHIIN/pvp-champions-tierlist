@@ -83,7 +83,9 @@ h1{font-size:1.5rem;font-weight:900;letter-spacing:.3px;margin:0;line-height:1}
 .match-gm img{width:100%;height:100%;object-fit:contain}
 .match-opp{flex:1;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .match-kd{color:var(--sub);font-size:.68rem;flex-shrink:0}
-.match-date{color:var(--sub);font-size:.62rem;flex-shrink:0;width:52px;text-align:right}
+.match-date{color:var(--sub);font-size:.62rem;flex-shrink:0;width:58px;text-align:right;line-height:1.4}
+.match-del{flex-shrink:0;width:22px;height:22px;border-radius:6px;background:var(--slot);border:1px solid var(--line);color:var(--sub);cursor:pointer;font-size:.9rem;line-height:1;font-family:inherit}
+.match-del:hover{background:#7a2626;color:#fff;border-color:#7a2626}
 .lb-top3{display:flex;gap:6px}
 .mini-gm{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;background:var(--slot);flex-shrink:0}
 .mini-gm img{width:60%;height:60%;object-fit:contain}
@@ -284,7 +286,10 @@ button.act{flex:1;padding:10px;border:none;border-radius:8px;cursor:pointer;font
       <option value="a">This player won</option>
       <option value="b">Opponent won</option>
     </select></div>
-    <div class="field"><label>Date</label><input type="date" id="match-date"></div>
+    <div class="gm-grid">
+      <div><label>Date</label><input type="date" id="match-date"></div>
+      <div><label>Time</label><input type="time" id="match-time"></div>
+    </div>
     <div class="gm-grid">
       <div><label>Their Kills</label><input type="number" id="match-kills" value="0"></div>
       <div><label>Their Deaths</label><input type="number" id="match-deaths" value="0"></div>
@@ -763,12 +768,15 @@ function renderHistory(p, matches){
     const label = (GAMEMODES.find(g=>g[0]===m.gamemode) || ["", m.gamemode])[1];
     const icon = IMG_DATA[m.gamemode] ? `<img src="${IMG_DATA[m.gamemode]}" alt="${label}">` : "";
     const dateStr = m.createdAt ? new Date(m.createdAt).toLocaleDateString(undefined,{month:"short",day:"numeric"}) : "";
+    const timeStr = m.createdAt ? new Date(m.createdAt).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}) : "";
+    const delBtn = isAdmin ? `<button class="match-del" data-id="${m.id}" title="Delete match">&times;</button>` : "";
     return `<div class="match-row">
       <span class="match-result ${won?"win":"loss"}">${won?"WIN":"LOSS"}</span>
       <div class="match-gm" title="${label}">${icon}</div>
       <span class="match-opp">${oppName}</span>
       <span class="match-kd">${me.kills||0}/${me.deaths||0}</span>
-      <span class="match-date">${dateStr}</span>
+      <span class="match-date">${dateStr}<br>${timeStr}</span>
+      ${delBtn}
     </div>`;
   }).join("");
   const kd = deaths>0 ? (kills/deaths).toFixed(2) : kills.toFixed(2);
@@ -785,6 +793,21 @@ function renderHistory(p, matches){
     ${topRival ? `<div class="rival-card">Most played rival: <b>${topRival}</b> — ${topCount} match${topCount===1?"":"es"}</div>` : ""}
     <div class="match-list">${rows}</div>
   `;
+  body.querySelectorAll(".match-del").forEach(btn=>{
+    btn.onclick = async (e)=>{
+      e.stopPropagation();
+      if(!confirm("Delete this match? This can't be undone.")) return;
+      btn.disabled = true;
+      try{
+        await deleteDoc(doc(db,"matches",btn.dataset.id));
+        const m0 = matches.find(x=>x.id===btn.dataset.id);
+        historyCache.delete(p.id);
+        if(m0 && m0.a) historyCache.delete(m0.a.playerId);
+        if(m0 && m0.b) historyCache.delete(m0.b.playerId);
+        loadHistory(p);
+      }catch(err){ alert("Couldn't delete match: " + err.message); btn.disabled = false; }
+    };
+  });
 }
 
 async function loadHistory(p){
@@ -815,7 +838,9 @@ function openLogMatch(p){
     .map(x=>`<option value="${x.id}">${x.name}</option>`).join("");
   document.getElementById("match-gamemode").innerHTML = GAMEMODES.map(([k,l])=>`<option value="${k}">${l}</option>`).join("");
   document.getElementById("match-winner").value = "a";
-  document.getElementById("match-date").value = new Date().toISOString().slice(0,10);
+  const now = new Date();
+  document.getElementById("match-date").value = now.toISOString().slice(0,10);
+  document.getElementById("match-time").value = now.toTimeString().slice(0,5);
   ["match-kills","match-deaths","match-opp-kills","match-opp-deaths"].forEach(id=> document.getElementById(id).value = 0);
   document.getElementById("matchBg").dataset.playerId = p.id;
   document.getElementById("matchBg").classList.add("open");
@@ -837,9 +862,10 @@ document.getElementById("saveMatchBtn").onclick = async ()=>{
     winner: document.getElementById("match-winner").value,
     status: "confirmed", source: "manual", confirmedBy: "site-admin",
     createdAt: (()=>{
-      const raw = document.getElementById("match-date").value;
-      if(!raw) return Date.now();
-      const t = new Date(raw + "T12:00:00").getTime();
+      const rawDate = document.getElementById("match-date").value;
+      if(!rawDate) return Date.now();
+      const rawTime = document.getElementById("match-time").value || "12:00";
+      const t = new Date(`${rawDate}T${rawTime}:00`).getTime();
       return isNaN(t) ? Date.now() : t;
     })()
   };
