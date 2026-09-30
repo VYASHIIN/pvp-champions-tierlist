@@ -62,6 +62,28 @@ h1{font-size:1.5rem;font-weight:900;letter-spacing:.3px;margin:0;line-height:1}
 .tbadge{display:block;flex-shrink:0;overflow:visible}
 .player-title{display:flex;align-items:center;gap:8px;margin-top:8px}
 .player-title span{font-size:.9rem;font-weight:800;letter-spacing:.3px}
+
+.profile-tabs{display:flex;gap:8px;margin:14px 0 12px;border-bottom:1px solid var(--line);padding-bottom:10px}
+.profile-tab{padding:6px 14px;border-radius:8px;background:var(--slot);border:1px solid var(--line);cursor:pointer;font-size:.72rem;font-weight:800;color:var(--sub);font-family:inherit}
+.profile-tab.active{background:var(--accent);color:#0a0a0c;border-color:var(--accent)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+.history-summary{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px}
+.hstat{display:flex;flex-direction:column;gap:2px;font-size:.64rem;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.hstat b{font-size:1rem;color:var(--text);font-weight:800}
+.rival-card{background:var(--slot);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:.76rem}
+.rival-card b{color:var(--accent)}
+.match-list{max-height:340px;overflow-y:auto}
+.match-row{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line);font-size:.76rem}
+.match-row:last-child{border-bottom:none}
+.match-result{font-weight:800;padding:3px 8px;border-radius:5px;font-size:.64rem;flex-shrink:0}
+.match-result.win{background:#1f7a4a;color:#fff}
+.match-result.loss{background:#7a2626;color:#fff}
+.match-gm{width:22px;height:22px;flex-shrink:0}
+.match-gm img{width:100%;height:100%;object-fit:contain}
+.match-opp{flex:1;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.match-kd{color:var(--sub);font-size:.68rem;flex-shrink:0}
+.match-date{color:var(--sub);font-size:.62rem;flex-shrink:0;width:52px;text-align:right}
 .lb-top3{display:flex;gap:6px}
 .mini-gm{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;background:var(--slot);flex-shrink:0}
 .mini-gm img{width:60%;height:60%;object-fit:contain}
@@ -232,10 +254,44 @@ button.act{flex:1;padding:10px;border:none;border-radius:8px;cursor:pointer;font
         <div class="player-stats">
           <div class="pstat"><span>Total Points</span><b id="viewPoints"></b></div>
         </div>
-        <div class="gm-tile-grid" id="viewStats"></div>
+        <div class="profile-tabs">
+          <button class="profile-tab active" id="tabOverview">Overview</button>
+          <button class="profile-tab" id="tabHistory">Match History</button>
+        </div>
+        <div class="tab-panel active" id="panelOverview">
+          <div class="gm-tile-grid" id="viewStats"></div>
+        </div>
+        <div class="tab-panel" id="panelHistory">
+          <div id="historyBody"><div class="empty">Loading…</div></div>
+        </div>
       </div>
     </div>
-    <div class="btnrow" id="editRow" style="display:none"><button class="act save" id="editBtn">Edit Player</button></div>
+    <div class="btnrow" id="editRow" style="display:none">
+      <button class="act save" id="editBtn">Edit Player</button>
+      <button class="act" id="logMatchBtn" style="background:var(--slot);border:1px solid var(--line);color:var(--text)">Log Match</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="matchBg">
+  <div class="modal">
+    <button class="modal-x" id="closeMatch">&times;</button>
+    <h2>LOG MATCH</h2>
+    <div class="field"><label>Player</label><input id="match-you" disabled></div>
+    <div class="field"><label>Opponent</label><select id="match-opponent"></select></div>
+    <div class="field"><label>Gamemode</label><select id="match-gamemode"></select></div>
+    <div class="field"><label>Winner</label><select id="match-winner">
+      <option value="a">This player won</option>
+      <option value="b">Opponent won</option>
+    </select></div>
+    <div class="field"><label>Date</label><input type="date" id="match-date"></div>
+    <div class="gm-grid">
+      <div><label>Their Kills</label><input type="number" id="match-kills" value="0"></div>
+      <div><label>Their Deaths</label><input type="number" id="match-deaths" value="0"></div>
+      <div><label>Opp Kills</label><input type="number" id="match-opp-kills" value="0"></div>
+      <div><label>Opp Deaths</label><input type="number" id="match-opp-deaths" value="0"></div>
+    </div>
+    <div class="btnrow"><button class="act save" id="saveMatchBtn">Save Match</button></div>
   </div>
 </div>
 
@@ -249,7 +305,7 @@ button.act{flex:1;padding:10px;border:none;border-radius:8px;cursor:pointer;font
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 // ====== FILL THESE IN FROM YOUR FIREBASE PROJECT ======
 const firebaseConfig = {
@@ -269,6 +325,7 @@ const ADMIN_PASSCODE = "khianthegoat1127";
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const playersCol = collection(db, "players");
+const matchesCol = collection(db, "matches");
 
 const GAMEMODES = [
   ["sword","Sword"],["axe","Axe"],["uhc","UHC"],["smp","SMP"],["mace","Mace"],
@@ -428,6 +485,8 @@ function gmIcon(key){
 
 let currentGM = "overall";
 let players = [];
+let currentViewPlayer = null;
+const historyCache = new Map();
 let editingId = null;
 let searchQuery = "";
 let isAdmin = sessionStorage.getItem("pvpAdmin") === "1";
@@ -668,7 +727,139 @@ function computeOverallRank(target){
   return sorted.findIndex(p=>p.id===target.id) + 1;
 }
 
+async function fetchPlayerMatches(playerId){
+  if(historyCache.has(playerId)) return historyCache.get(playerId);
+  const [snapA, snapB] = await Promise.all([
+    getDocs(query(matchesCol, where("a.playerId","==",playerId))),
+    getDocs(query(matchesCol, where("b.playerId","==",playerId)))
+  ]);
+  const seen = new Set();
+  const matches = [...snapA.docs, ...snapB.docs]
+    .map(d=>({id:d.id, ...d.data()}))
+    .filter(m=> seen.has(m.id) ? false : (seen.add(m.id), true))
+    .sort((x,y)=> (y.createdAt||0) - (x.createdAt||0));
+  historyCache.set(playerId, matches);
+  return matches;
+}
+
+function renderHistory(p, matches){
+  const body = document.getElementById("historyBody");
+  if(!matches.length){
+    body.innerHTML = `<div class="empty">No matches logged yet.</div>`;
+    return;
+  }
+  let wins=0, losses=0, kills=0, deaths=0;
+  const rivals = {};
+  const rows = matches.map(m=>{
+    const isA = m.a && m.a.playerId === p.id;
+    const me = (isA ? m.a : m.b) || {};
+    const opp = (isA ? m.b : m.a) || {};
+    const won = m.winner === (isA ? "a" : "b");
+    if(won) wins++; else losses++;
+    kills += me.kills || 0;
+    deaths += me.deaths || 0;
+    const oppName = opp.ign || "Unknown";
+    rivals[oppName] = (rivals[oppName]||0) + 1;
+    const label = (GAMEMODES.find(g=>g[0]===m.gamemode) || ["", m.gamemode])[1];
+    const icon = IMG_DATA[m.gamemode] ? `<img src="${IMG_DATA[m.gamemode]}" alt="${label}">` : "";
+    const dateStr = m.createdAt ? new Date(m.createdAt).toLocaleDateString(undefined,{month:"short",day:"numeric"}) : "";
+    return `<div class="match-row">
+      <span class="match-result ${won?"win":"loss"}">${won?"WIN":"LOSS"}</span>
+      <div class="match-gm" title="${label}">${icon}</div>
+      <span class="match-opp">${oppName}</span>
+      <span class="match-kd">${me.kills||0}/${me.deaths||0}</span>
+      <span class="match-date">${dateStr}</span>
+    </div>`;
+  }).join("");
+  const kd = deaths>0 ? (kills/deaths).toFixed(2) : kills.toFixed(2);
+  let topRival = null, topCount = 0;
+  Object.entries(rivals).forEach(([name,count])=>{ if(count>topCount){ topCount=count; topRival=name; } });
+  body.innerHTML = `
+    <div class="history-summary">
+      <div class="hstat"><span>Wins</span><b>${wins}</b></div>
+      <div class="hstat"><span>Losses</span><b>${losses}</b></div>
+      <div class="hstat"><span>K/D</span><b>${kd}</b></div>
+      <div class="hstat"><span>Kills</span><b>${kills}</b></div>
+      <div class="hstat"><span>Deaths</span><b>${deaths}</b></div>
+    </div>
+    ${topRival ? `<div class="rival-card">Most played rival: <b>${topRival}</b> — ${topCount} match${topCount===1?"":"es"}</div>` : ""}
+    <div class="match-list">${rows}</div>
+  `;
+}
+
+async function loadHistory(p){
+  const body = document.getElementById("historyBody");
+  body.innerHTML = `<div class="empty">Loading…</div>`;
+  try{
+    renderHistory(p, await fetchPlayerMatches(p.id));
+  }catch(e){
+    body.innerHTML = `<div class="empty">Couldn't load match history.</div>`;
+  }
+}
+
+function showTab(tab){
+  const isOverview = tab === "overview";
+  document.getElementById("tabOverview").classList.toggle("active", isOverview);
+  document.getElementById("tabHistory").classList.toggle("active", !isOverview);
+  document.getElementById("panelOverview").classList.toggle("active", isOverview);
+  document.getElementById("panelHistory").classList.toggle("active", !isOverview);
+  if(!isOverview && currentViewPlayer) loadHistory(currentViewPlayer);
+}
+document.getElementById("tabOverview").onclick = ()=> showTab("overview");
+document.getElementById("tabHistory").onclick = ()=> showTab("history");
+
+function openLogMatch(p){
+  document.getElementById("match-you").value = p.name;
+  document.getElementById("match-opponent").innerHTML = players
+    .filter(x=>x.id!==p.id).sort((a,b)=>(a.name||"").localeCompare(b.name||""))
+    .map(x=>`<option value="${x.id}">${x.name}</option>`).join("");
+  document.getElementById("match-gamemode").innerHTML = GAMEMODES.map(([k,l])=>`<option value="${k}">${l}</option>`).join("");
+  document.getElementById("match-winner").value = "a";
+  document.getElementById("match-date").value = new Date().toISOString().slice(0,10);
+  ["match-kills","match-deaths","match-opp-kills","match-opp-deaths"].forEach(id=> document.getElementById(id).value = 0);
+  document.getElementById("matchBg").dataset.playerId = p.id;
+  document.getElementById("matchBg").classList.add("open");
+}
+document.getElementById("closeMatch").onclick = ()=> document.getElementById("matchBg").classList.remove("open");
+
+document.getElementById("saveMatchBtn").onclick = async ()=>{
+  const me = players.find(x=>x.id === document.getElementById("matchBg").dataset.playerId);
+  const opp = players.find(x=>x.id === document.getElementById("match-opponent").value);
+  if(!me || !opp){ alert("Pick a valid opponent."); return; }
+  const data = {
+    gamemode: document.getElementById("match-gamemode").value,
+    a: { playerId: me.id, ign: me.name,
+         kills: Number(document.getElementById("match-kills").value)||0,
+         deaths: Number(document.getElementById("match-deaths").value)||0 },
+    b: { playerId: opp.id, ign: opp.name,
+         kills: Number(document.getElementById("match-opp-kills").value)||0,
+         deaths: Number(document.getElementById("match-opp-deaths").value)||0 },
+    winner: document.getElementById("match-winner").value,
+    status: "confirmed", source: "manual", confirmedBy: "site-admin",
+    createdAt: (()=>{
+      const raw = document.getElementById("match-date").value;
+      if(!raw) return Date.now();
+      const t = new Date(raw + "T12:00:00").getTime();
+      return isNaN(t) ? Date.now() : t;
+    })()
+  };
+  const btn = document.getElementById("saveMatchBtn");
+  btn.disabled = true;
+  try{
+    await addDoc(matchesCol, data);
+    historyCache.delete(me.id);
+    historyCache.delete(opp.id);
+    document.getElementById("matchBg").classList.remove("open");
+    if(currentViewPlayer && currentViewPlayer.id===me.id && document.getElementById("panelHistory").classList.contains("active")){
+      loadHistory(currentViewPlayer);
+    }
+  }catch(e){ alert("Couldn't save match: " + e.message); }
+  finally{ btn.disabled = false; }
+};
+
 function openView(p){
+  currentViewPlayer = p;
+  showTab("overview");
   const rank = computeOverallRank(p);
   const skinEl = document.getElementById("viewSkin");
   if(p.skin){ skinEl.src = p.skin; skinEl.style.display = "block"; } else { skinEl.style.display = "none"; }
@@ -713,6 +904,7 @@ function openView(p){
   });
   document.getElementById("editRow").style.display = isAdmin ? "flex" : "none";
   document.getElementById("editBtn").onclick = ()=> openEdit(p);
+  document.getElementById("logMatchBtn").onclick = ()=> openLogMatch(p);
   document.getElementById("viewBg").classList.add("open");
 }
 
